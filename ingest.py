@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import glob
+import multiprocessing
 from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
@@ -106,7 +107,13 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     with Pool(processes=os.cpu_count()) as pool:
         results = []
         with tqdm(total=len(filtered_files), desc='Loading new documents', ncols=80) as pbar:
-            for i, docs in enumerate(pool.imap_unordered(load_single_document, filtered_files)):
+            for i, file_path in enumerate(filtered_files):
+                # Check if the folder name is "ignore" before loading the file
+                folder_name = os.path.basename(os.path.dirname(file_path))
+                if folder_name.lower() == "ignore":
+                    continue  # Skip loading files from "ignore" folder
+
+                docs = load_single_document(file_path)
                 results.extend(docs)
                 pbar.update()
 
@@ -139,9 +146,19 @@ def main():
     db.add_documents(texts)
     db.persist()
     db = None
+    print(f"Ingestion complete!")
 
-    print(f"Ingestion complete! You can now run privateGPT.py to query your documents")
+    print(f"Moving all files from {source_directory} to ./loaded_documents")
+    os.makedirs("./loaded_documents", exist_ok=True)
+    for file_path in os.listdir(source_directory):
+        source_file_path = os.path.join(source_directory, file_path)
+        target_file_path = os.path.join("./loaded_documents", file_path)
+        os.rename(source_file_path, target_file_path)
 
+    print(f"All files moved to {persist_directory}")
+    print("Done!")
+    exit(0)
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
